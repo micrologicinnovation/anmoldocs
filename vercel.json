@@ -1,4 +1,11 @@
 {
-    "framework": null,
-    "buildCommand": "npm run build"
+    "framework": "vite",
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist/client",
+    "rewrites": [
+      {
+        "source": "/(.*)",
+        "destination": "/index.html"
+      }
+    ]
   }
