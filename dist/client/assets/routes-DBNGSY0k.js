@@ -1,0 +1,1 @@
+import{c as e,d as t}from"./useRouter-DWxFnw5j.js";import{E as n}from"./index-BkfVyBrJ.js";var r=t(e());function i(){let e=n();return(0,r.useEffect)(()=>{e({to:`/home`,replace:!0})},[e]),null}export{i as component};
