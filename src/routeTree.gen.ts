@@ -15,9 +15,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedOutwardIndexRouteImport } from './routes/_authenticated/outward.index'
 import { Route as AuthenticatedInwardIndexRouteImport } from './routes/_authenticated/inward.index'
-import { Route as AuthenticatedInwardVendorIdRouteImport } from './routes/_authenticated/inward.$vendorId'
 import { Route as AuthenticatedOutwardPartyIdIndexRouteImport } from './routes/_authenticated/outward.$partyId.index'
+import { Route as AuthenticatedInwardVendorIdIndexRouteImport } from './routes/_authenticated/inward.$vendorId.index'
 import { Route as AuthenticatedOutwardPartyIdOrderIdRouteImport } from './routes/_authenticated/outward.$partyId.$orderId'
+import { Route as AuthenticatedInwardVendorIdOrderIdRouteImport } from './routes/_authenticated/inward.$vendorId.$orderId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -50,16 +51,16 @@ const AuthenticatedInwardIndexRoute =
     path: '/inward/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedInwardVendorIdRoute =
-  AuthenticatedInwardVendorIdRouteImport.update({
-    id: '/inward/$vendorId',
-    path: '/inward/$vendorId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedOutwardPartyIdIndexRoute =
   AuthenticatedOutwardPartyIdIndexRouteImport.update({
     id: '/outward/$partyId/',
     path: '/outward/$partyId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedInwardVendorIdIndexRoute =
+  AuthenticatedInwardVendorIdIndexRouteImport.update({
+    id: '/inward/$vendorId/',
+    path: '/inward/$vendorId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedOutwardPartyIdOrderIdRoute =
@@ -68,25 +69,33 @@ const AuthenticatedOutwardPartyIdOrderIdRoute =
     path: '/outward/$partyId/$orderId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedInwardVendorIdOrderIdRoute =
+  AuthenticatedInwardVendorIdOrderIdRouteImport.update({
+    id: '/inward/$vendorId/$orderId',
+    path: '/inward/$vendorId/$orderId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/home': typeof AuthenticatedHomeRoute
-  '/inward/$vendorId': typeof AuthenticatedInwardVendorIdRoute
   '/inward/': typeof AuthenticatedInwardIndexRoute
   '/outward/': typeof AuthenticatedOutwardIndexRoute
+  '/inward/$vendorId/$orderId': typeof AuthenticatedInwardVendorIdOrderIdRoute
   '/outward/$partyId/$orderId': typeof AuthenticatedOutwardPartyIdOrderIdRoute
+  '/inward/$vendorId/': typeof AuthenticatedInwardVendorIdIndexRoute
   '/outward/$partyId/': typeof AuthenticatedOutwardPartyIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/home': typeof AuthenticatedHomeRoute
-  '/inward/$vendorId': typeof AuthenticatedInwardVendorIdRoute
   '/inward': typeof AuthenticatedInwardIndexRoute
   '/outward': typeof AuthenticatedOutwardIndexRoute
+  '/inward/$vendorId/$orderId': typeof AuthenticatedInwardVendorIdOrderIdRoute
   '/outward/$partyId/$orderId': typeof AuthenticatedOutwardPartyIdOrderIdRoute
+  '/inward/$vendorId': typeof AuthenticatedInwardVendorIdIndexRoute
   '/outward/$partyId': typeof AuthenticatedOutwardPartyIdIndexRoute
 }
 export interface FileRoutesById {
@@ -95,10 +104,11 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
-  '/_authenticated/inward/$vendorId': typeof AuthenticatedInwardVendorIdRoute
   '/_authenticated/inward/': typeof AuthenticatedInwardIndexRoute
   '/_authenticated/outward/': typeof AuthenticatedOutwardIndexRoute
+  '/_authenticated/inward/$vendorId/$orderId': typeof AuthenticatedInwardVendorIdOrderIdRoute
   '/_authenticated/outward/$partyId/$orderId': typeof AuthenticatedOutwardPartyIdOrderIdRoute
+  '/_authenticated/inward/$vendorId/': typeof AuthenticatedInwardVendorIdIndexRoute
   '/_authenticated/outward/$partyId/': typeof AuthenticatedOutwardPartyIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -107,20 +117,22 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/home'
-    | '/inward/$vendorId'
     | '/inward/'
     | '/outward/'
+    | '/inward/$vendorId/$orderId'
     | '/outward/$partyId/$orderId'
+    | '/inward/$vendorId/'
     | '/outward/$partyId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/home'
-    | '/inward/$vendorId'
     | '/inward'
     | '/outward'
+    | '/inward/$vendorId/$orderId'
     | '/outward/$partyId/$orderId'
+    | '/inward/$vendorId'
     | '/outward/$partyId'
   id:
     | '__root__'
@@ -128,10 +140,11 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/home'
-    | '/_authenticated/inward/$vendorId'
     | '/_authenticated/inward/'
     | '/_authenticated/outward/'
+    | '/_authenticated/inward/$vendorId/$orderId'
     | '/_authenticated/outward/$partyId/$orderId'
+    | '/_authenticated/inward/$vendorId/'
     | '/_authenticated/outward/$partyId/'
   fileRoutesById: FileRoutesById
 }
@@ -185,18 +198,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInwardIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/inward/$vendorId': {
-      id: '/_authenticated/inward/$vendorId'
-      path: '/inward/$vendorId'
-      fullPath: '/inward/$vendorId'
-      preLoaderRoute: typeof AuthenticatedInwardVendorIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/outward/$partyId/': {
       id: '/_authenticated/outward/$partyId/'
       path: '/outward/$partyId'
       fullPath: '/outward/$partyId/'
       preLoaderRoute: typeof AuthenticatedOutwardPartyIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/inward/$vendorId/': {
+      id: '/_authenticated/inward/$vendorId/'
+      path: '/inward/$vendorId'
+      fullPath: '/inward/$vendorId/'
+      preLoaderRoute: typeof AuthenticatedInwardVendorIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/outward/$partyId/$orderId': {
@@ -206,25 +219,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOutwardPartyIdOrderIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/inward/$vendorId/$orderId': {
+      id: '/_authenticated/inward/$vendorId/$orderId'
+      path: '/inward/$vendorId/$orderId'
+      fullPath: '/inward/$vendorId/$orderId'
+      preLoaderRoute: typeof AuthenticatedInwardVendorIdOrderIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
-  AuthenticatedInwardVendorIdRoute: typeof AuthenticatedInwardVendorIdRoute
   AuthenticatedInwardIndexRoute: typeof AuthenticatedInwardIndexRoute
   AuthenticatedOutwardIndexRoute: typeof AuthenticatedOutwardIndexRoute
+  AuthenticatedInwardVendorIdOrderIdRoute: typeof AuthenticatedInwardVendorIdOrderIdRoute
   AuthenticatedOutwardPartyIdOrderIdRoute: typeof AuthenticatedOutwardPartyIdOrderIdRoute
+  AuthenticatedInwardVendorIdIndexRoute: typeof AuthenticatedInwardVendorIdIndexRoute
   AuthenticatedOutwardPartyIdIndexRoute: typeof AuthenticatedOutwardPartyIdIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
-  AuthenticatedInwardVendorIdRoute: AuthenticatedInwardVendorIdRoute,
   AuthenticatedInwardIndexRoute: AuthenticatedInwardIndexRoute,
   AuthenticatedOutwardIndexRoute: AuthenticatedOutwardIndexRoute,
+  AuthenticatedInwardVendorIdOrderIdRoute:
+    AuthenticatedInwardVendorIdOrderIdRoute,
   AuthenticatedOutwardPartyIdOrderIdRoute:
     AuthenticatedOutwardPartyIdOrderIdRoute,
+  AuthenticatedInwardVendorIdIndexRoute: AuthenticatedInwardVendorIdIndexRoute,
   AuthenticatedOutwardPartyIdIndexRoute: AuthenticatedOutwardPartyIdIndexRoute,
 }
 

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, Plus, Search, ClipboardList } from "lucide-react";
+import { ChevronLeft, Plus, Search, ClipboardList, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/storage";
 
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/_authenticated/outward/$partyId/")({
 function PartyOrdersPage() {
   const { partyId } = Route.useParams();
   const [q, setQ] = useState("");
+  const qc = useQueryClient();
 
   const partyQ = useQuery({
     queryKey: ["party", partyId],
@@ -39,6 +40,25 @@ function PartyOrdersPage() {
       return data ?? [];
     },
   });
+
+  const deleteOrderMut = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("orders").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["party-orders", partyId] });
+      qc.invalidateQueries({ queryKey: ["parties"] });
+      toast.success("Order deleted successfully");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleDelete = (orderId: string) => {
+    if (confirm("Are you sure you want to delete this order? All associated documents will also be removed.")) {
+      deleteOrderMut.mutate(orderId);
+    }
+  };
 
   const filtered = (ordersQ.data ?? []).filter((o) => o.po_number.toLowerCase().includes(q.toLowerCase()));
 
@@ -65,22 +85,36 @@ function PartyOrdersPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((o) => (
-            <Link
-              key={o.id}
-              to="/outward/$partyId/$orderId"
-              params={{ partyId, orderId: o.id }}
-              className="group rounded-xl border bg-card p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
-            >
-              <div className="flex items-start gap-3">
-                <div className="size-11 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <ClipboardList className="size-5" />
+            <div key={o.id} className="group relative rounded-xl border bg-card transition-all hover:shadow-md hover:-translate-y-0.5">
+              <Link
+                to="/outward/$partyId/$orderId"
+                params={{ partyId, orderId: o.id }}
+                className="block p-5"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="size-11 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                    <ClipboardList className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1 pr-6">
+                    <div className="font-semibold truncate">{o.po_number}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Created {formatDate(o.created_at)}</div>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold truncate">{o.po_number}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Created {formatDate(o.created_at)}</div>
-                </div>
-              </div>
-            </Link>
+              </Link>
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100 text-destructive hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.preventDefault(); // Prevent link navigation
+                  handleDelete(o.id);
+                }}
+                disabled={deleteOrderMut.isPending}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
           ))}
         </div>
       )}
