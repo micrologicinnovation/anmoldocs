@@ -1,15 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { 
-  ChevronLeft, Plus, Search, ClipboardList, Trash2, 
-  Upload, Eye, Download, FileText, Receipt, ScrollText 
-} from "lucide-react";
+import { ChevronLeft, Plus, Search, ClipboardList, Trash2, Upload, Eye, Download, FileText, Receipt, ScrollText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { uploadDocumentFile, getSignedUrl, deleteStorageFile, formatDate } from "@/lib/storage";
 import { UploadDropzone } from "@/components/upload-dropzone";
@@ -28,6 +25,7 @@ type Doc = {
   file_name: string;
   storage_path: string;
   mime_type: string;
+  comments: string | null;
 };
 
 function VendorDashboardPage() {
@@ -35,8 +33,9 @@ function VendorDashboardPage() {
   const [q, setQ] = useState("");
   const qc = useQueryClient();
   const [preview, setPreview] = useState<{ path: string; mime: string; name: string } | null>(null);
+  const [editingOrder, setEditingOrder] = useState<{ id: string; po_number: string } | null>(null);
+  const [editingDoc, setEditingDoc] = useState<Doc | null>(null);
 
-  // 1. Fetch Vendor Details
   const vendorQ = useQuery({
     queryKey: ["vendor", vendorId],
     queryFn: async () => {
@@ -46,30 +45,19 @@ function VendorDashboardPage() {
     },
   });
 
-  // 2. Fetch Purchase Orders
   const ordersQ = useQuery({
     queryKey: ["vendor-orders", vendorId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("vendor_id", vendorId)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("orders").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // 3. Fetch Direct Documents (Where order_id is null)
   const directDocsQ = useQuery({
     queryKey: ["vendor-direct-docs", vendorId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("vendor_id", vendorId)
-        .is("order_id", null) // ONLY fetch docs not linked to an order
-        .order("doc_date", { ascending: false });
+      const { data, error } = await supabase.from("documents").select("*").eq("vendor_id", vendorId).is("order_id", null).order("doc_date", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Doc[];
     },
@@ -83,7 +71,20 @@ function VendorDashboardPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["vendor-orders", vendorId] });
       qc.invalidateQueries({ queryKey: ["vendors"] });
-      toast.success("Order deleted successfully");
+      toast.success("Order deleted");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editOrderMut = useMutation({
+    mutationFn: async ({ id, po_number }: { id: string; po_number: string }) => {
+      const { error } = await supabase.from("orders").update({ po_number: po_number.trim() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vendor-orders", vendorId] });
+      toast.success("Order updated");
+      setEditingOrder(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -92,7 +93,6 @@ function VendorDashboardPage() {
 
   return (
     <div className="space-y-10">
-      {/* HEADER */}
       <div>
         <Link to="/inward" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
           <ChevronLeft className="size-4" /> Back to vendors
@@ -128,7 +128,7 @@ function VendorDashboardPage() {
         ) : (
           <ul className="divide-y">
             {directDocsQ.data!.map((b) => (
-              <li key={b.id} className="px-5 py-4 flex flex-wrap items-center gap-3">
+              <li key={b.id} className="px-5 py-4 flex flex-wrap items-start gap-3">
                 <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${b.kind === "bill" ? "bg-primary/10 text-primary" : "bg-foreground/10 text-foreground"}`}>
                   {b.kind === "bill" ? <Receipt className="size-5" /> : <ScrollText className="size-5" />}
                 </div>
@@ -138,15 +138,23 @@ function VendorDashboardPage() {
                     {b.doc_number ? ` #${b.doc_number}` : ""}
                     <span className="text-muted-foreground font-normal truncate">— {b.file_name}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
+                  {b.comments && (
+                    <div className="text-sm text-muted-foreground mt-1 bg-muted/50 p-2 rounded-md border inline-block w-full">
+                      {b.comments}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
                     Date: {formatDate(b.doc_date)} · Uploaded: {formatDate(b.uploaded_at)}
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 mt-1">
                   <Button size="sm" variant="outline" onClick={() => setPreview({ path: b.storage_path, mime: b.mime_type, name: b.file_name })}>
                     <Eye className="size-4 mr-1" /> View
                   </Button>
                   <DownloadBtn path={b.storage_path} name={b.file_name} />
+                  <Button size="sm" variant="ghost" onClick={() => setEditingDoc(b)}>
+                    <Pencil className="size-4" />
+                  </Button>
                   <DeleteDocBtn id={b.id} path={b.storage_path} vendorId={vendorId} />
                 </div>
               </li>
@@ -182,54 +190,106 @@ function VendorDashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredOrders.map((o) => (
               <div key={o.id} className="group relative rounded-xl border bg-card transition-all hover:shadow-md hover:-translate-y-0.5">
-                <Link
-                  to="/inward/$vendorId/$orderId"
-                  params={{ vendorId, orderId: o.id }}
-                  className="block p-5"
-                >
+                <Link to="/inward/$vendorId/$orderId" params={{ vendorId, orderId: o.id }} className="block p-5">
                   <div className="flex items-start gap-3">
                     <div className="size-11 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                       <ClipboardList className="size-5" />
                     </div>
-                    <div className="min-w-0 flex-1 pr-6">
+                    <div className="min-w-0 flex-1 pr-16">
                       <div className="font-semibold truncate">{o.po_number}</div>
                       <div className="text-xs text-muted-foreground mt-1">Created {formatDate(o.created_at)}</div>
                     </div>
                   </div>
                 </Link>
                 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100 text-destructive hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (confirm("Delete this order? All mapped documents will also be removed.")) {
-                      deleteOrderMut.mutate(o.id);
-                    }
-                  }}
-                  disabled={deleteOrderMut.isPending}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Button variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); setEditingOrder(o); }}>
+                    <Pencil className="size-4 text-muted-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={(e) => { e.preventDefault(); if (confirm("Delete this order?")) deleteOrderMut.mutate(o.id); }}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <DocumentPreviewModal
-        open={!!preview}
-        onOpenChange={(o) => !o && setPreview(null)}
-        storagePath={preview?.path ?? null}
-        mimeType={preview?.mime ?? null}
-        fileName={preview?.name ?? null}
-      />
+      <DocumentPreviewModal open={!!preview} onOpenChange={(o) => !o && setPreview(null)} storagePath={preview?.path ?? null} mimeType={preview?.mime ?? null} fileName={preview?.name ?? null} />
+      {editingDoc && <EditDocDialog doc={editingDoc} onClose={() => setEditingDoc(null)} queryKey={["vendor-direct-docs", vendorId]} />}
+      
+      {/* EDIT ORDER DIALOG */}
+      <Dialog open={!!editingOrder} onOpenChange={(o) => !o && setEditingOrder(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Order Details</DialogTitle></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); if (editingOrder) editOrderMut.mutate(editingOrder); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>PO Number</Label>
+              <Input autoFocus value={editingOrder?.po_number || ""} onChange={(e) => setEditingOrder(prev => prev ? { ...prev, po_number: e.target.value } : null)} />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={editOrderMut.isPending}>{editOrderMut.isPending ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 // --- UTILITY COMPONENTS ---
+
+export function EditDocDialog({ doc, onClose, queryKey }: { doc: Doc; onClose: () => void; queryKey: any[] }) {
+  const [num, setNum] = useState(doc.doc_number || "");
+  const [date, setDate] = useState(doc.doc_date);
+  const [com, setCom] = useState(doc.comments || "");
+  const qc = useQueryClient();
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("documents").update({
+        doc_number: num.trim() || null,
+        doc_date: date,
+        comments: com.trim() || null,
+      }).eq("id", doc.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey });
+      toast.success("Document updated");
+      onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Document Details</DialogTitle></DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Document Number</Label>
+              <Input value={num} onChange={(e) => setNum(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Comments</Label>
+            <Input value={com} onChange={(e) => setCom(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={mut.isPending}>{mut.isPending ? "Saving..." : "Save Changes"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function DownloadBtn({ path, name }: { path: string; name: string }) {
   async function go() {
@@ -267,6 +327,7 @@ function UploadDirectDocDialog({ vendorId, kind }: { vendorId: string; kind: "bi
   const [file, setFile] = useState<File | null>(null);
   const [docNumber, setDocNumber] = useState("");
   const [docDate, setDocDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [comments, setComments] = useState("");
   const qc = useQueryClient();
 
   const mut = useMutation({
@@ -284,6 +345,7 @@ function UploadDirectDocDialog({ vendorId, kind }: { vendorId: string; kind: "bi
         storage_path: path,
         mime_type: file.type || "application/octet-stream",
         uploaded_by: userRes.user?.id ?? null,
+        comments: comments.trim() || null,
       });
       if (error) { await deleteStorageFile(path); throw error; }
     },
@@ -292,6 +354,7 @@ function UploadDirectDocDialog({ vendorId, kind }: { vendorId: string; kind: "bi
       toast.success(`${kind === "bill" ? "Bill" : "Challan"} uploaded directly to vendor`);
       setFile(null);
       setDocNumber("");
+      setComments("");
       setOpen(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -316,6 +379,14 @@ function UploadDirectDocDialog({ vendorId, kind }: { vendorId: string; kind: "bi
               <Label>Date</Label>
               <Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} required />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Comments (Optional)</Label>
+            <Input 
+              value={comments} 
+              onChange={(e) => setComments(e.target.value)} 
+              placeholder="Add any extra info or notes here..." 
+            />
           </div>
           {file ? (
             <div className="flex items-center gap-3 rounded-lg border p-3">

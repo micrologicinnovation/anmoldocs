@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronLeft, Upload, Eye, Download, Trash2, FileText, Receipt, ScrollText } from "lucide-react";
+import { ChevronLeft, Upload, Eye, Download, Trash2, FileText, Receipt, ScrollText, Pencil } from "lucide-react";
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { DocumentPreviewModal } from "@/components/document-preview-modal";
 import { uploadDocumentFile, getSignedUrl, deleteStorageFile, formatDate } from "@/lib/storage";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/outward/$partyId/$orderId")({
-  component: OrderDocumentsPage,
+  component: PartyOrderDocumentsPage,
 });
 
 type Doc = {
@@ -25,9 +25,10 @@ type Doc = {
   file_name: string;
   storage_path: string;
   mime_type: string;
+  comments: string | null;
 };
 
-function OrderDocumentsPage() {
+function PartyOrderDocumentsPage() {
   const { partyId, orderId } = Route.useParams();
 
   const orderQ = useQuery({
@@ -63,6 +64,7 @@ function OrderDocumentsPage() {
   }, [docsQ.data]);
 
   const [preview, setPreview] = useState<{ path: string; mime: string; name: string } | null>(null);
+  const [editingDoc, setEditingDoc] = useState<Doc | null>(null);
 
   return (
     <div className="space-y-6">
@@ -71,12 +73,12 @@ function OrderDocumentsPage() {
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-sm uppercase tracking-wider text-muted-foreground">Order</div>
+          <div className="text-sm uppercase tracking-wider text-muted-foreground">Purchase Order</div>
           <h1 className="text-3xl font-semibold tracking-tight mt-1">{orderQ.data?.po_number ?? "..."}</h1>
         </div>
         <div className="flex gap-2">
-          <UploadDocDialog orderId={orderId} kind="challan" />
-          <UploadDocDialog orderId={orderId} kind="bill" />
+          <UploadDocDialog orderId={orderId} partyId={partyId} kind="challan" />
+          <UploadDocDialog orderId={orderId} partyId={partyId} kind="bill" />
         </div>
       </div>
 
@@ -90,7 +92,7 @@ function OrderDocumentsPage() {
         ) : grouped.length === 0 ? (
           <div className="p-10 text-center text-muted-foreground">
             <FileText className="size-8 mx-auto mb-2 opacity-50" />
-            No documents yet. Upload a challan or bill.
+            No documents yet. Upload a received challan or bill.
           </div>
         ) : (
           <div className="divide-y">
@@ -101,24 +103,32 @@ function OrderDocumentsPage() {
                 </div>
                 <ul className="divide-y">
                   {docs.map((b) => (
-                    <li key={b.id} className="px-5 py-4 flex flex-wrap items-center gap-3">
+                    <li key={b.id} className="px-5 py-4 flex flex-wrap items-start gap-3">
                       <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${b.kind === "bill" ? "bg-primary/10 text-primary" : "bg-foreground/10 text-foreground"}`}>
                         {b.kind === "bill" ? <Receipt className="size-5" /> : <ScrollText className="size-5" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">
-                          <span className="capitalize">{b.kind}</span>
+                          <span className="capitalize">{b.kind.replace("_", " ")}</span>
                           {b.doc_number ? ` #${b.doc_number}` : ""} <span className="text-muted-foreground font-normal">— {b.file_name}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
+                        {b.comments && (
+                          <div className="text-sm text-muted-foreground mt-1 bg-muted/50 p-2 rounded-md border">
+                            {b.comments}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
                           Date: {formatDate(b.doc_date)} · Uploaded: {formatDate(b.uploaded_at)}
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 mt-1">
                         <Button size="sm" variant="outline" onClick={() => setPreview({ path: b.storage_path, mime: b.mime_type, name: b.file_name })}>
                           <Eye className="size-4 mr-1" /> View
                         </Button>
                         <DownloadBtn path={b.storage_path} name={b.file_name} />
+                        <Button size="sm" variant="ghost" onClick={() => setEditingDoc(b)}>
+                          <Pencil className="size-4" />
+                        </Button>
                         <DeleteBtn id={b.id} path={b.storage_path} orderId={orderId} />
                       </div>
                     </li>
@@ -130,14 +140,64 @@ function OrderDocumentsPage() {
         )}
       </div>
 
-      <DocumentPreviewModal
-        open={!!preview}
-        onOpenChange={(o) => !o && setPreview(null)}
-        storagePath={preview?.path ?? null}
-        mimeType={preview?.mime ?? null}
-        fileName={preview?.name ?? null}
-      />
+      <DocumentPreviewModal open={!!preview} onOpenChange={(o) => !o && setPreview(null)} storagePath={preview?.path ?? null} mimeType={preview?.mime ?? null} fileName={preview?.name ?? null} />
+      
+      {/* Edit Document Dialog */}
+      {editingDoc && <EditDocDialog doc={editingDoc} onClose={() => setEditingDoc(null)} queryKey={["order-docs", orderId]} />}
     </div>
+  );
+}
+
+// --- UTILITY COMPONENTS ---
+
+export function EditDocDialog({ doc, onClose, queryKey }: { doc: Doc; onClose: () => void; queryKey: any[] }) {
+  const [num, setNum] = useState(doc.doc_number || "");
+  const [date, setDate] = useState(doc.doc_date);
+  const [com, setCom] = useState(doc.comments || "");
+  const qc = useQueryClient();
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("documents").update({
+        doc_number: num.trim() || null,
+        doc_date: date,
+        comments: com.trim() || null,
+      }).eq("id", doc.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey });
+      toast.success("Document updated");
+      onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Document Details</DialogTitle></DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Document Number</Label>
+              <Input value={num} onChange={(e) => setNum(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Comments</Label>
+            <Input value={com} onChange={(e) => setCom(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={mut.isPending}>{mut.isPending ? "Saving..." : "Save Changes"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -172,11 +232,12 @@ function DeleteBtn({ id, path, orderId }: { id: string; path: string; orderId: s
   );
 }
 
-function UploadDocDialog({ orderId, kind }: { orderId: string; kind: "bill" | "challan" }) {
+function UploadDocDialog({ orderId, partyId, kind }: { orderId: string; partyId: string; kind: "bill" | "challan" }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [docNumber, setDocNumber] = useState("");
   const [docDate, setDocDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [comments, setComments] = useState("");
   const qc = useQueryClient();
 
   const mut = useMutation({
@@ -187,12 +248,14 @@ function UploadDocDialog({ orderId, kind }: { orderId: string; kind: "bill" | "c
       const { error } = await supabase.from("documents").insert({
         kind,
         order_id: orderId,
+        party_id: partyId,
         doc_number: docNumber.trim() || null,
         doc_date: docDate,
         file_name: file.name,
         storage_path: path,
         mime_type: file.type || "application/octet-stream",
         uploaded_by: userRes.user?.id ?? null,
+        comments: comments.trim() || null,
       });
       if (error) { await deleteStorageFile(path); throw error; }
     },
@@ -201,6 +264,7 @@ function UploadDocDialog({ orderId, kind }: { orderId: string; kind: "bill" | "c
       toast.success(`${kind === "bill" ? "Bill" : "Challan"} uploaded`);
       setFile(null);
       setDocNumber("");
+      setComments("");
       setOpen(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -225,6 +289,14 @@ function UploadDocDialog({ orderId, kind }: { orderId: string; kind: "bill" | "c
               <Label>Date</Label>
               <Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} required />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Comments (Optional)</Label>
+            <Input 
+              value={comments} 
+              onChange={(e) => setComments(e.target.value)} 
+              placeholder="Add any extra info or notes here..." 
+            />
           </div>
           {file ? (
             <div className="flex items-center gap-3 rounded-lg border p-3">
